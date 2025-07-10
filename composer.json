@@ -1,0 +1,18 @@
+{
+    "name": "drupal/ip2location_api",
+    "description": "Provices wrapper service for ip2location_api",
+    "type": "drupal-module",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Luke Stewart",
+            "homepage": "https://www.fuzion.co.nz",
+            "role": "Maintainer"
+        }
+    ],
+    "homepage": "https://fuzion.co.nz",
+    "require": {
+        "drupal/ip2location_api": "^1.0.0-alpha1",
+	"drupal/webform": "^6.2"
+    }
+}

@@ -1,0 +1,8 @@
+name: 'Webform Validate Country'
+type: module
+description: 'Validator for Country fields'
+package: Custom
+core_version_requirement: ^10 || ^11
+dependencies:
+  - ip2location_api:ip2location_api
+  - webform:webform
