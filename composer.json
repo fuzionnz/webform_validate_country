@@ -1,6 +1,6 @@
 {
     "name": "drupal/webform_validate_country",
-    "description": "Provices wrapper service for ip2location_api",
+    "description": "Validation using ip2location_api",
     "type": "drupal-module",
     "license": "GPL-2.0-or-later",
     "authors": [
