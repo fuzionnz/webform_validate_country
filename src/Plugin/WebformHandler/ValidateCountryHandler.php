@@ -81,7 +81,7 @@ class ValidateCountryHandler extends WebformHandlerBase {
       '#min' => 1, // Minimum allowed value is 1
       '#step' => 1, // Ensure integers only (no decimals)
       '#required' => TRUE,
-      '#default' => $this->configuration['failures_before_allow'] ?? 1,
+      '#default_value' => $this->configuration['failures_before_allow'] ?? 1,
     ];
 
     return $this->setSettingsParents($form);
