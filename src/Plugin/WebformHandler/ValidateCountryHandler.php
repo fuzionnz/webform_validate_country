@@ -107,7 +107,10 @@ class ValidateCountryHandler extends WebformHandlerBase {
     parent::submitConfigurationForm($form, $form_state);
     $this->configuration['country_field'] = $form_state->getValue('country_field');
     $this->configuration['failed_to_validate_field'] = $form_state->getValue('failed_to_validate_field');
-    $this->configuration['failures_before_allow'] = $form_state->getValue('failures_before_allow');
+    $options_greater_than_zero_default_one = ['options' => ['min_range' => 0, 'default'=> 1]];
+    $failures_before_allow = $form_state->getValue('failures_before_allow');
+    $failures_before_allow = filter_var($failures_before_allow , FILTER_VALIDATE_INT, $options_greater_than_zero_default_one);
+    $this->configuration['failures_before_allow'] = $failures_before_allow;
     $this->configuration['validation_failure_msg'] = $form_state->getValue('validation_failure_msg');
   }
 
