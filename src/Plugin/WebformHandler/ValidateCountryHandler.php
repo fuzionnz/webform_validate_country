@@ -164,9 +164,15 @@ class ValidateCountryHandler extends WebformHandlerBase {
     // This is not ideal - but the values we set are in the fields added by the handler.
 
     $country_field = $this->configuration['country_field'];
+    $current_page = $form_state->getStorage()['current_page'] ?? '';
+    if (!empty($current_page) && !isset($form['elements'][$current_page][$country_field])){
+      // We only want to validate if we are on the correct page.
+      return;
+    }
+    // If we don't have the field we are probably on a multi page form.
+
     $failures_before_allow = $this->configuration['failures_before_allow'];
     $failure_country_mismatch_str = $this->configuration['validation_failure_msg'] ?? $this->defaultValidationVsg;
-
 
     // Get the submitted country.
     $submitted_country = $form_state->getValue($country_field) ?? "";
