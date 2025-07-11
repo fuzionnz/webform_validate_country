@@ -87,6 +87,19 @@ class ValidateCountryHandler extends WebformHandlerBase {
     return $this->setSettingsParents($form);
   }
 
+
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
+    $options_greater_than_zero_default_one = ['options' => ['min_range' => 0]];
+    $failures_before_allow = filter_var($form_state->getValue('failures_before_allow') , FILTER_VALIDATE_INT, $options_greater_than_zero_default_one);
+    if (empty($failures_before_allow)){
+      $form_state->setErrorByName('failures_before_allow', $this->t('Failures before allow must be either 0 or a positive integer'));
+    }
+  }
+
   /**
    * {@inheritdoc}
    */
