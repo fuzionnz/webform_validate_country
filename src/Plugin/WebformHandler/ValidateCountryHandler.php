@@ -39,13 +39,6 @@ class ValidateCountryHandler extends WebformHandlerBase {
      */
     private string $defaultValidationMsg;
 
-    /**
-     * @var \Drupal\Core\TempStore\PrivateTempStoreFactory
-     */
-    private PrivateTempStoreFactory $tempStore;
-
-
-
   /**
    * {@inheritdoc}
    */
@@ -56,7 +49,6 @@ class ValidateCountryHandler extends WebformHandlerBase {
     $plugin_definition) {
     $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
     $instance->ip2LocationAPI = $container->get('ip2location_api.iplookup');
-    $instance->tempStore = $container->get('tempstore.private');
     $instance->defaultValidationMsg = 'Are you sure you are not from %value.';
     return $instance;
   }
@@ -106,37 +98,19 @@ class ValidateCountryHandler extends WebformHandlerBase {
     $this->configuration['validation_failure_msg'] = $form_state->getValue('validation_failure_msg');
   }
 
-
-
-  private function getStore(){
-    return$this->tempStore->get($this->webform->id() . $this->getHandlerId());
-  }
-  private function storeData(string $key, string|int $data){
-    try {
-      $store = $this->getStore();
-      $store->set($key, $data);
-    } catch (TempStoreException $e){
-      return;
-    }
+  private function storeData(string $key, string|int $data, FormStateInterface $form_state){
+    $storage = $form_state->getStorage();
+    $key = $this->handler_id . $key;
+    $storage[$key] = $data;
+    $form_state->setStorage($storage);
   }
 
-  private function getData(string $key) : string|int|NULL {
-    try {
-      $store = $this->getStore();
-      return $store->get($key);
-    } catch (TempStoreException $e){
-      return NULL;
-    }
+  private function getData(string $key, FormStateInterface $form_state) : string|int|NULL {
+    $storage = $form_state->getStorage();
+    $key = $this->handler_id . $key;
+    return $storage[$key] ?? NULL;
   }
 
-  /**
-   * Clear all data in this tempstore collection.
-   */
-  public function clearAllData() {
-    $store = $this->getStore();
-    $store->delete('previous_failures');
-    $store->delete('previous_country');
-  }
 
 
   public function submitForm(array &$form, FormStateInterface $form_state, WebformSubmissionInterface $webform_submission) {
@@ -159,7 +133,6 @@ class ValidateCountryHandler extends WebformHandlerBase {
         $webform_submission->setNotes($notes);
       }
     }
-    $this->clearAllData();
   }
 
   /**
@@ -188,8 +161,8 @@ class ValidateCountryHandler extends WebformHandlerBase {
 
 
     // Check what happened last time.
-    $previous_country = $this->getData('previous_country');
-    $previous_failures = $this->getData('previous_failures') ?? 0;
+    $previous_country = $this->getData('previous_country', $form_state);
+    $previous_failures = $this->getData('previous_failures',$form_state) ?? 0;
 
 
 
@@ -207,14 +180,14 @@ class ValidateCountryHandler extends WebformHandlerBase {
         return;
       }
       // Increment previous_failures set failure and return.
-      $this->storeData('previous_failures', $failures);
+      $this->storeData('previous_failures', $failures, $form_state);
       $form_state->setErrorByName($country_field,$this->t($failure_country_mismatch_str, ['%value' => $guessed_country]));
       return;
     }
 
     // We need to update the previous_country and reset previous failures field.
-    $this->storeData('previous_failures', 1);
-    $this->storeData('previous_country', $submitted_country);
+    $this->storeData('previous_failures', 1, $form_state);
+    $this->storeData('previous_country', $submitted_country, $form_state);
     $form_state->setErrorByName($country_field,$this->t($failure_country_mismatch_str, ['%value' => $guessed_country]));
   }
 }
