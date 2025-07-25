@@ -74,7 +74,7 @@ class ValidateCountryHandler extends WebformHandlerBase {
       '#title' => $this->t('Fallback hidden field on the form stores the number of unsucessful validations as a fall back.'),
       '#default_value' => $this->configuration['failed_validations_fallback_field'],
       '#required' => FALSE,
-    ]
+    ];
     $form['validation_failure_msg'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Default validation message - include %value to show the country we think you are from.'),
