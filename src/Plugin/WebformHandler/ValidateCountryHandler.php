@@ -206,6 +206,10 @@ class ValidateCountryHandler extends WebformHandlerBase {
     }
 
     // We failed validation - increment our failure field and store in fall back.
+    if (!is_int($previous_failures)){
+      $options = ['options' => ['min_range' => 0, 'default' => 1]];
+      $previous_failures = filter_var($previous_failures, FILTER_VALIDATE_INT, $options);
+    }
     $failures = $previous_failures + 1;
     $form_state->setValue($this->configuration['failed_validations_fallback_field'], $failures);
 
