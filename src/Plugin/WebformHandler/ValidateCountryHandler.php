@@ -10,6 +10,7 @@ use Drupal\ip2location_api\IplookupInterface;
 use Drupal\webform\Plugin\WebformHandlerBase;
 use Drupal\webform\WebformSubmissionInterface;
 
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -39,6 +40,10 @@ class ValidateCountryHandler extends WebformHandlerBase {
      */
     private string $defaultValidationMsg;
 
+
+    private RequestStack $requestStack;
+
+
   /**
    * {@inheritdoc}
    */
@@ -50,6 +55,7 @@ class ValidateCountryHandler extends WebformHandlerBase {
     $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
     $instance->ip2LocationAPI = $container->get('ip2location_api.iplookup');
     $instance->defaultValidationMsg = 'Are you sure you are not from %value.';
+    $instance->requestStack = $container->get('request_stack');
     return $instance;
   }
 
@@ -67,12 +73,6 @@ class ValidateCountryHandler extends WebformHandlerBase {
       '#type' => 'textfield',
       '#title' => $this->t('If present we will store a 1/0 value based on whether we pass/fail validation in this field.'),
       '#default_value' => $this->configuration['failed_to_validate_field'],
-      '#required' => FALSE,
-    ];
-    $form['failed_validations_fallback_field'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Fallback hidden field on the form stores the number of unsucessful validations as a fall back.'),
-      '#default_value' => $this->configuration['failed_validations_fallback_field'],
       '#required' => FALSE,
     ];
     $form['validation_failure_msg'] = [
@@ -119,7 +119,6 @@ class ValidateCountryHandler extends WebformHandlerBase {
     $failures_before_allow = filter_var($failures_before_allow , FILTER_VALIDATE_INT, $options_greater_than_zero_default_one);
     $this->configuration['failures_before_allow'] = $failures_before_allow;
     $this->configuration['validation_failure_msg'] = $form_state->getValue('validation_failure_msg');
-    $this->configuration['failed_validations_fallback_field'] = $form_state->getValue('failed_validations_fallback_field');
 
   }
 
@@ -128,17 +127,33 @@ class ValidateCountryHandler extends WebformHandlerBase {
     $key = $this->handler_id . $key;
     $storage[$key] = $data;
     $form_state->setStorage($storage);
+    $request = $this->requestStack->getCurrentRequest();
+    $session = $request->getSession();
+    $session->set($key, $data);
   }
 
   private function getData(string $key, FormStateInterface $form_state) : string|int|NULL {
     $storage = $form_state->getStorage();
     $key = $this->handler_id . $key;
-    return $storage[$key] ?? NULL;
+    if (!empty($storage[$key])){
+      return $storage[$key];
+    }
+    $request = $this->requestStack->getCurrentRequest();
+    $session = $request->getSession();
+    return $session->get($key, $data);
   }
 
 
 
   public function submitForm(array &$form, FormStateInterface $form_state, WebformSubmissionInterface $webform_submission) {
+    // Remove session values to allow for session destruction.
+    $request = $this->requestStack->getCurrentRequest();
+    $session = $request->getSession();
+    $prefix = $this->handler_id;
+    $keys = array_filter($session->all(), function($k) use ($prefix) {return strpos($k, $prefix) === 0;}, ARRAY_FILTER_USE_KEY );
+    foreach($keys as $key){
+      $session->remove($key);
+    }
     $failed_to_validate_field =  $this->configuration['failed_to_validate_field'] ?? '';
     if (!empty($failed_to_validate_field)){
       $guessed_country = $this->ip2LocationAPI->getCountryName();
@@ -174,6 +189,7 @@ class ValidateCountryHandler extends WebformHandlerBase {
 
     $country_field = $this->configuration['country_field'];
     $current_page = $form_state->getStorage()['current_page'] ?? '';
+
     if (!empty($current_page) && !isset($form['elements'][$current_page][$country_field])){
       // We only want to validate if we are on the correct page.
       return;
@@ -185,6 +201,7 @@ class ValidateCountryHandler extends WebformHandlerBase {
 
     // Get the submitted country.
     $submitted_country = $form_state->getValue($country_field) ?? "";
+
     if (empty($submitted_country)){
        $form_state->setErrorByName($country_field, $this->t('Country field required.'));
     }
@@ -195,13 +212,11 @@ class ValidateCountryHandler extends WebformHandlerBase {
     // For some reason in some cases the form_state data is not persisted properly. I can't easily replicate so we use this
     // as a work around.
     $previous_country = $this->getData('previous_country', $form_state);
-    $previous_failures = $this->getData('previous_failures',$form_state) ??  $form_state->getValue($this->configuration['failed_validations_fallback_field']) ?? 0;
-
+    $previous_failures = $this->getData('previous_failures',$form_state) ?? 0;
 
 
     if ($guessed_country == $submitted_country){
       // Our guess matches the submitted - Pass validation.
-      $form_state->setValue($this->configuration['failed_validations_fallback_field'], 0);
       return;
     }
 
@@ -211,7 +226,6 @@ class ValidateCountryHandler extends WebformHandlerBase {
       $previous_failures = filter_var($previous_failures, FILTER_VALIDATE_INT, $options);
     }
     $failures = $previous_failures + 1;
-    $form_state->setValue($this->configuration['failed_validations_fallback_field'], $failures);
 
     // We should fail at this point unless we have had more failures than $failures_before_allow.
     if ($previous_country == $submitted_country) {
@@ -225,10 +239,25 @@ class ValidateCountryHandler extends WebformHandlerBase {
       $form_state->setErrorByName($country_field,$this->t($failure_country_mismatch_str, ['%value' => $guessed_country]));
       return;
     }
-
-    // We need to update the previous_country and reset previous failures field.
-    $this->storeData('previous_failures', 1, $form_state);
-    $this->storeData('previous_country', $submitted_country, $form_state);
-    $form_state->setErrorByName($country_field,$this->t($failure_country_mismatch_str, ['%value' => $guessed_country]));
+    else if (empty($previous_country)) {
+      // We probably are not storing the data so lets increment anyway.
+      if ( $failures > $failures_before_allow){
+        // We've hit our max failures.
+        // Pass Validation
+        return;
+      }
+      $this->storeData('previous_failures', 1, $form_state);
+      $this->storeData('previous_country', $submitted_country, $form_state);
+      $form_state->setErrorByName($country_field,$this->t($failure_country_mismatch_str, ['%value' => $guessed_country]));
+      return;
+    }
+    else {
+      // We need to update the previous_country and reset previous failures field.
+      $failures = 0;
+      $this->storeData('previous_failures', 1, $form_state);
+      $this->storeData('previous_country', $submitted_country, $form_state);
+      $form_state->setErrorByName($country_field,$this->t($failure_country_mismatch_str, ['%value' => $guessed_country]));
+      return;
+    }
   }
 }
